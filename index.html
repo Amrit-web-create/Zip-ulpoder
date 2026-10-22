@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zip2Git Deployer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- JSZip CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            darkest: '#3E3239',
+                            dark: '#6B5560',
+                            mid: '#9E8189',
+                            soft: '#C7A9A3',
+                            light: '#E8D2C4',
+                            lightest: '#F7EFE7'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #3E3239;
+            color: #F7EFE7;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            touch-action: manipulation;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #3E3239;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #9E8189;
+            border-radius: 9999px;
+        }
+        .glass-card {
+            background: rgba(107, 85, 96, 0.35);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(199, 169, 163, 0.25);
+        }
+        .glow-button {
+            box-shadow: 0 4px 20px -2px rgba(232, 210, 196, 0.35);
+            transition: all 0.2s ease-in-out;
+        }
+        .glow-button:active {
+            transform: scale(0.97);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col pb-16 antialiased">
+
+    <!-- Header Section -->
+    <header class="w-full bg-[#3E3239] border-b border-[#6B5560] sticky top-0 z-40 px-4 py-4 sm:px-8 shadow-xl">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-[#E8D2C4] text-[#3E3239] flex items-center justify-center text-2xl font-black shadow-lg">
+                    <i class="fa-solid fa-box-archive"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-[#F7EFE7] uppercase leading-none">
+                        Zip2<span class="text-[#E8D2C4]">Git</span>
+                    </h1>
+                    <span class="text-[10px] font-bold text-[#C7A9A3] tracking-widest uppercase">Instant GitHub Extractor</span>
+                </div>
+            </div>
+            
+            <button id="authBtn" onclick="toggleAuthModal()" class="px-4 py-2.5 rounded-2xl bg-[#6B5560] hover:bg-[#9E8189] text-[#F7EFE7] font-black text-xs sm:text-sm flex items-center gap-2 border border-[#C7A9A3]/30 shadow-md transition-all">
+                <i class="fa-brands fa-github text-base"></i>
+                <span id="authBtnText">Login GitHub</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-4xl w-full mx-auto px-4 pt-6 space-y-6 flex-1">
+
+        <!-- Connected User Status Banner -->
+        <div id="statusBanner" class="hidden rounded-2xl bg-[#6B5560]/40 border border-[#C7A9A3]/40 p-4 flex items-center justify-between gap-4 shadow-lg">
+            <div class="flex items-center gap-3">
+                <img id="userAvatar" src="" class="w-11 h-11 rounded-full border-2 border-[#E8D2C4]" alt="Avatar">
+                <div>
+                    <div class="text-[10px] text-[#C7A9A3] font-bold uppercase tracking-wider">GitHub Connected</div>
+                    <div id="userName" class="text-base font-extrabold text-[#F7EFE7]">@username</div>
+                </div>
+            </div>
+            <button onclick="disconnectGithub()" class="text-xs text-red-300 hover:text-red-100 font-bold px-3 py-2 rounded-xl bg-[#3E3239] border border-[#9E8189]/40">
+                <i class="fa-solid fa-right-from-bracket mr-1"></i> Disconnect
+            </button>
+        </div>
+
+        <!-- STEP 1: ZIP FILE UPLOAD & EZYZIP VIEW -->
+        <section class="glass-card rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black bg-[#E8D2C4] text-[#3E3239] px-3.5 py-1.5 rounded-full uppercase tracking-wider">Step 1</span>
+                <span id="fileCountBadge" class="text-xs font-black text-[#E8D2C4]">No ZIP Loaded</span>
+            </div>
+
+            <div>
+                <h2 class="text-2xl sm:text-3xl font-black text-[#F7EFE7] uppercase">Upload ZIP Archive</h2>
+                <p class="text-xs sm:text-sm text-[#C7A9A3] mt-1 font-medium">Select your source code zip file. It will extract 100% of files including hidden folders.</p>
+            </div>
+
+            <!-- Upload Area -->
+            <div id="dropZone" onclick="document.getElementById('zipInput').click()" 
+                 class="border-3 border-dashed border-[#9E8189] hover:border-[#E8D2C4] bg-[#3E3239]/60 hover:bg-[#6B5560]/30 rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 shadow-inner">
+                <input type="file" id="zipInput" accept=".zip" class="hidden" onchange="handleZipUpload(event)">
+                <div class="w-16 h-16 rounded-2xl bg-[#6B5560] text-[#E8D2C4] flex items-center justify-center text-3xl shadow-lg">
+                    <i class="fa-solid fa-file-zipper"></i>
+                </div>
+                <div>
+                    <p class="text-xl font-extrabold text-[#F7EFE7]">Click to Select ZIP File</p>
+                    <p class="text-xs text-[#C7A9A3] mt-1 font-mono">Supports Grok, Vite, React, Next, Node & All Source Zips</p>
+                </div>
+            </div>
+
+            <!-- ezyZip Style Directory Viewer -->
+            <div id="ezyExplorer" class="hidden space-y-4 pt-2 border-t border-[#6B5560]">
+                <!-- Header Stats & Search -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#3E3239] p-3.5 rounded-2xl border border-[#6B5560]">
+                    <div class="flex items-center gap-2 text-sm font-bold text-[#F7EFE7]">
+                        <i class="fa-solid fa-folder-open text-[#E8D2C4]"></i>
+                        <span id="zipNameText" class="truncate font-mono">workspace.zip</span>
+                        <span id="zipTotalSizeText" class="text-xs text-[#C7A9A3] font-mono bg-[#6B5560] px-2 py-0.5 rounded-md">0 MB</span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <div class="relative flex-1 sm:w-48">
+                            <input type="text" id="fileSearchInput" oninput="filterFiles()" placeholder="Search files..." class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#6B5560]/50 border border-[#9E8189] text-xs text-[#F7EFE7] focus:outline-none">
+                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-xs text-[#C7A9A3]"></i>
+                        </div>
+                        <button onclick="clearZip()" class="text-xs font-extrabold text-red-300 hover:text-red-100 bg-[#3E3239] px-3 py-1.5 rounded-xl border border-red-400/30">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Breadcrumb Path Navigator -->
+                <div class="flex items-center gap-2 font-mono text-xs bg-[#2A2227] px-4 py-2 rounded-xl text-[#E8D2C4] overflow-x-auto custom-scrollbar">
+                    <i class="fa-solid fa-house text-[#C7A9A3]"></i>
+                    <span id="currentBreadcrumb" class="font-bold">/ (root)</span>
+                </div>
+
+                <!-- Complete Unrestricted Folder & File List (Full View) -->
+                <div id="ezyFileList" class="bg-[#2A2227] rounded-2xl p-2 border border-[#6B5560] space-y-1 font-mono text-sm">
+                    <!-- Dynamic File Entries (ezyZip Layout) -->
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 2: REPOSITORY SELECTION / CREATION -->
+        <section class="glass-card rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black bg-[#E8D2C4] text-[#3E3239] px-3.5 py-1.5 rounded-full uppercase tracking-wider">Step 2</span>
+                <div class="flex gap-2">
+                    <button id="modeNewBtn" onclick="switchRepoMode('new')" class="text-xs font-extrabold px-3.5 py-1.5 rounded-xl bg-[#E8D2C4] text-[#3E3239]">Create New Repo</button>
+                    <button id="modeExistingBtn" onclick="switchRepoMode('existing')" class="text-xs font-extrabold px-3.5 py-1.5 rounded-xl bg-[#6B5560] text-[#F7EFE7] hover:bg-[#9E8189]">Select Existing</button>
+                </div>
+            </div>
+
+            <h2 class="text-2xl sm:text-3xl font-black text-[#F7EFE7] uppercase">GitHub Target Repository</h2>
+
+            <!-- New Repo Section -->
+            <div id="newRepoSection" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-extrabold text-[#C7A9A3] uppercase tracking-wider mb-2">Repository Name</label>
+                    <input type="text" id="newRepoName" placeholder="my-website-project" class="w-full px-4 py-3.5 rounded-2xl bg-[#3E3239] border border-[#9E8189] text-[#F7EFE7] font-bold text-base focus:outline-none focus:border-[#E8D2C4]">
+                </div>
+                <div>
+                    <label class="block text-xs font-extrabold text-[#C7A9A3] uppercase tracking-wider mb-2">Description (Optional)</label>
+                    <input type="text" id="newRepoDesc" placeholder="Source code uploaded via Zip2Git" class="w-full px-4 py-3 rounded-2xl bg-[#3E3239] border border-[#9E8189] text-[#F7EFE7] text-sm focus:outline-none">
+                </div>
+                <div class="flex items-center justify-between bg-[#3E3239]/80 p-4 rounded-2xl border border-[#6B5560]">
+                    <div>
+                        <div class="font-extrabold text-[#F7EFE7] text-sm">Privacy Setting</div>
+                        <div class="text-xs text-[#C7A9A3]">Public repositories allow free deployment on Cloudflare/Vercel</div>
+                    </div>
+                    <select id="newRepoPrivate" class="bg-[#6B5560] border border-[#9E8189] text-[#F7EFE7] font-bold px-3 py-2 rounded-xl text-xs focus:outline-none">
+                        <option value="false">Public</option>
+                        <option value="true">Private</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Existing Repo Section -->
+            <div id="existingRepoSection" class="hidden space-y-4">
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs font-extrabold text-[#C7A9A3] uppercase tracking-wider">Choose Existing Repository</label>
+                        <button onclick="fetchUserRepositories()" class="text-xs text-[#E8D2C4] font-bold hover:underline">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh
+                        </button>
+                    </div>
+                    <select id="repoSelect" class="w-full px-4 py-3.5 rounded-2xl bg-[#3E3239] border border-[#9E8189] text-[#F7EFE7] font-bold text-sm focus:outline-none focus:border-[#E8D2C4]">
+                        <option value="">-- Connect GitHub First --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-extrabold text-[#C7A9A3] uppercase tracking-wider mb-2">Branch Name</label>
+                    <input type="text" id="targetBranch" value="main" class="w-full px-4 py-3 rounded-2xl bg-[#3E3239] border border-[#9E8189] text-[#F7EFE7] font-mono text-sm">
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 3: REAL COMMIT & DEPLOYMENT -->
+        <section class="glass-card rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black bg-[#E8D2C4] text-[#3E3239] px-3.5 py-1.5 rounded-full uppercase tracking-wider">Step 3</span>
+                <span class="text-xs font-bold text-[#C7A9A3]">Git Trees API v3</span>
+            </div>
+
+            <div>
+                <h2 class="text-2xl sm:text-3xl font-black text-[#F7EFE7] uppercase">Push to GitHub</h2>
+                <p class="text-xs sm:text-sm text-[#C7A9A3] mt-1">Directly commits all extracted files into your repository branch in 1 atomic operation.</p>
+            </div>
+
+            <button id="deployBtn" onclick="startDeployment()" class="w-full py-4.5 rounded-2xl bg-[#E8D2C4] hover:bg-[#F7EFE7] text-[#3E3239] font-black text-lg tracking-wider shadow-2xl glow-button flex items-center justify-center gap-3 uppercase">
+                <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                <span id="deployBtnText">Push All Files To GitHub</span>
+            </button>
+
+            <!-- Real-time Progress & Logs -->
+            <div id="progressContainer" class="hidden space-y-3 pt-2">
+                <div class="flex justify-between text-xs font-extrabold text-[#E8D2C4]">
+                    <span id="progressStatusText">Preparing blobs...</span>
+                    <span id="progressPercentText">0%</span>
+                </div>
+                <div class="w-full bg-[#3E3239] rounded-full h-3.5 overflow-hidden border border-[#6B5560]">
+                    <div id="progressBar" class="bg-gradient-to-r from-[#9E8189] via-[#C7A9A3] to-[#E8D2C4] h-full w-0 transition-all duration-300"></div>
+                </div>
+                
+                <div id="logBox" class="bg-[#2A2227] rounded-2xl p-4 font-mono text-xs text-[#E8D2C4] h-40 overflow-y-auto custom-scrollbar border border-[#6B5560] space-y-1">
+                    <div class="text-[#9E8189]">Ready for commit...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DEPLOYMENT SUCCESS LINKS -->
+        <section id="deploymentHelper" class="hidden glass-card rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4 bg-emerald-950/30 border-emerald-500/40">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center text-xl font-black">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-emerald-200 uppercase">Successfully Pushed to GitHub!</h3>
+                    <a id="pushedRepoUrl" href="#" target="_blank" class="text-xs font-mono text-[#E8D2C4] underline truncate block">https://github.com/username/repo</a>
+                </div>
+            </div>
+
+            <p class="text-xs sm:text-sm text-[#C7A9A3]">Your project files are safely committed on GitHub with exact directory structure. Click below to host live:</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <a id="cloudflareLink" href="https://dash.cloudflare.com/" target="_blank" class="p-4 rounded-2xl bg-[#3E3239] hover:bg-[#6B5560] border border-[#9E8189]/40 flex flex-col items-center text-center gap-2 group transition shadow-md">
+                    <i class="fa-solid fa-cloud text-2xl text-[#E8D2C4] group-hover:scale-110 transition"></i>
+                    <span class="font-extrabold text-sm text-[#F7EFE7]">Cloudflare Pages</span>
+                </a>
+                <a id="vercelLink" href="#" target="_blank" class="p-4 rounded-2xl bg-[#3E3239] hover:bg-[#6B5560] border border-[#9E8189]/40 flex flex-col items-center text-center gap-2 group transition shadow-md">
+                    <i class="fa-solid fa-triangle-exclamation text-2xl text-[#F7EFE7] group-hover:scale-110 transition"></i>
+                    <span class="font-extrabold text-sm text-[#F7EFE7]">Deploy to Vercel</span>
+                </a>
+                <a id="netlifyLink" href="#" target="_blank" class="p-4 rounded-2xl bg-[#3E3239] hover:bg-[#6B5560] border border-[#9E8189]/40 flex flex-col items-center text-center gap-2 group transition shadow-md">
+                    <i class="fa-solid fa-diamond text-2xl text-[#C7A9A3] group-hover:scale-110 transition"></i>
+                    <span class="font-extrabold text-sm text-[#F7EFE7]">Deploy to Netlify</span>
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL: GITHUB TOKEN CONNECT -->
+    <div id="authModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#3E3239] border border-[#C7A9A3]/40 rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-5 shadow-2xl relative">
+            <button onclick="toggleAuthModal()" class="absolute top-5 right-5 text-[#C7A9A3] hover:text-[#F7EFE7]">
+                <i class="fa-solid fa-xmark text-2xl"></i>
+            </button>
+
+            <div class="w-14 h-14 rounded-2xl bg-[#E8D2C4] text-[#3E3239] flex items-center justify-center text-3xl font-black shadow-lg">
+                <i class="fa-brands fa-github"></i>
+            </div>
+
+            <div>
+                <h3 class="text-2xl font-black text-[#F7EFE7] uppercase">GitHub Connect</h3>
+                <p class="text-xs text-[#C7A9A3] mt-1 leading-relaxed">Connect via GitHub Personal Access Token to create repositories & push extracted code seamlessly.</p>
+            </div>
+
+            <!-- Pre-configured Quick Token Generator Link -->
+            <div class="p-4 rounded-2xl bg-[#2A2227] border border-[#6B5560] space-y-2">
+                <div class="text-xs font-extrabold text-[#E8D2C4] uppercase">Step A: Get Token (1-Tap)</div>
+                <p class="text-[11px] text-[#C7A9A3]">Click below to generate a pre-filled token on GitHub with <code class="bg-[#6B5560] px-1 py-0.5 rounded text-[#F7EFE7]">repo</code> scope:</p>
+                <a href="https://github.com/settings/tokens/new?scopes=repo,public_repo&description=Zip2Git_Deployer_Token" 
+                   target="_blank" 
+                   class="inline-flex items-center gap-2 text-xs font-black text-[#3E3239] bg-[#E8D2C4] hover:bg-[#F7EFE7] px-3.5 py-2 rounded-xl shadow-md transition">
+                    <i class="fa-solid fa-key"></i> Generate Token on GitHub
+                </a>
+            </div>
+
+            <div class="space-y-3">
+                <div class="text-xs font-extrabold text-[#E8D2C4] uppercase">Step B: Paste Token Below</div>
+                <input type="password" id="patInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx" class="w-full px-4 py-3.5 rounded-2xl bg-[#2A2227] border border-[#9E8189] text-[#F7EFE7] font-mono text-xs focus:outline-none focus:border-[#E8D2C4]">
+            </div>
+
+            <button onclick="saveGithubToken()" class="w-full py-4 rounded-2xl bg-[#E8D2C4] hover:bg-[#F7EFE7] text-[#3E3239] font-black text-base shadow-xl glow-button uppercase">
+                Verify & Save Connection
+            </button>
+        </div>
+    </div>
+
+    <!-- SCRIPT LOGIC -->
+    <script>
+        // Application State
+        let extractedFiles = {}; // { path: { blob, size, isText, textContent } }
+        let currentPathFilter = '';
+        let githubUser = null;
+        let activeRepoMode = 'new';
+
+        // Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedToken = localStorage.getItem('zip2git_github_token');
+            if (savedToken) {
+                verifyAndLoadGithub(savedToken);
+            }
+        });
+
+        function toggleAuthModal() {
+            document.getElementById('authModal').classList.toggle('hidden');
+        }
+
+        function switchRepoMode(mode) {
+            activeRepoMode = mode;
+            const newSec = document.getElementById('newRepoSection');
+            const existSec = document.getElementById('existingRepoSection');
+            const btnNew = document.getElementById('modeNewBtn');
+            const btnExist = document.getElementById('modeExistingBtn');
+
+            if (mode === 'new') {
+                newSec.classList.remove('hidden');
+                existSec.classList.add('hidden');
+                btnNew.className = "text-xs font-extrabold px-3.5 py-1.5 rounded-xl bg-[#E8D2C4] text-[#3E3239]";
+                btnExist.className = "text-xs font-extrabold px-3.5 py-1.5 rounded-xl bg-[#6B5560] text-[#F7EFE7] hover:bg-[#9E8189]";
+            } else {
+                newSec.classList.add('hidden');
+                existSec.classList.remove('hidden');
+                btnExist.className = "text-xs font-extrabold px-3.5 py-1.5 rounded-xl bg-[#E8D2C4] text-[#3E3239]";
+                btnNew.className = "text-xs font-extrabold px-3.5 py-1.5 rounded-xl bg-[#6B5560] text-[#F7EFE7] hover:bg-[#9E8189]";
+                if (githubUser) fetchUserRepositories();
+            }
+        }
+
+        // GitHub Authentication
+        async function verifyAndLoadGithub(token) {
+            try {
+                const res = await fetch('https://api.github.com/user', {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+
+                if (!res.ok) throw new Error('Token verification failed');
+
+                githubUser = await res.json();
+                localStorage.setItem('zip2git_github_token', token);
+
+                document.getElementById('statusBanner').classList.remove('hidden');
+                document.getElementById('userName').innerText = `@${githubUser.login}`;
+                document.getElementById('userAvatar').src = githubUser.avatar_url;
+                document.getElementById('authBtnText').innerText = githubUser.login;
+                document.getElementById('authBtn').classList.replace('bg-[#6B5560]', 'bg-emerald-800');
+
+                if (activeRepoMode === 'existing') {
+                    fetchUserRepositories();
+                }
+            } catch (err) {
+                alert('Authentication Failed: Invalid GitHub Personal Access Token.');
+                disconnectGithub();
+            }
+        }
+
+        function saveGithubToken() {
+            const token = document.getElementById('patInput').value.trim();
+            if (!token) return alert('Please paste your GitHub Personal Access Token.');
+            verifyAndLoadGithub(token);
+            toggleAuthModal();
+        }
+
+        function disconnectGithub() {
+            localStorage.removeItem('zip2git_github_token');
+            githubUser = null;
+            document.getElementById('statusBanner').classList.add('hidden');
+            document.getElementById('authBtnText').innerText = 'Login GitHub';
+            document.getElementById('authBtn').classList.replace('bg-emerald-800', 'bg-[#6B5560]');
+        }
+
+        async function fetchUserRepositories() {
+            const token = localStorage.getItem('zip2git_github_token');
+            if (!token) return;
+
+            const select = document.getElementById('repoSelect');
+            select.innerHTML = '<option value="">Loading your repositories...</option>';
+
+            try {
+                const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                const repos = await res.json();
+
+                select.innerHTML = repos.map(r => 
+                    `<option value="${r.full_name}">${r.full_name} (${r.private ? 'Private' : 'Public'})</option>`
+                ).join('');
+            } catch (err) {
+                select.innerHTML = '<option value="">Failed to fetch repositories</option>';
+            }
+        }
+
+        // ZIP Extractor Logic
+        async function handleZipUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            extractedFiles = {};
+            document.getElementById('zipNameText').innerText = file.name;
+            document.getElementById('zipTotalSizeText').innerText = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+
+            try {
+                const zip = await JSZip.loadAsync(file);
+                const entries = Object.keys(zip.files);
+
+                // Detect common top-level root directory in zip
+                let commonPrefix = "";
+                const firstEntry = entries[0];
+                if (firstEntry && firstEntry.includes('/')) {
+                    const candidate = firstEntry.split('/')[0] + '/';
+                    if (entries.every(e => e.startsWith(candidate))) {
+                        commonPrefix = candidate;
+                    }
+                }
+
+                for (const filename of entries) {
+                    const zipObj = zip.files[filename];
+                    if (zipObj.dir) continue; // Skip raw directory markers
+
+                    let cleanPath = filename;
+                    if (commonPrefix && cleanPath.startsWith(commonPrefix)) {
+                        cleanPath = cleanPath.substring(commonPrefix.length);
+                    }
+
+                    if (!cleanPath) continue;
+
+                    const blob = await zipObj.async('blob');
+                    const isText = isTextFile(cleanPath);
+                    let textContent = null;
+
+                    if (isText) {
+                        textContent = await zipObj.async('text');
+                    }
+
+                    extractedFiles[cleanPath] = {
+                        blob: blob,
+                        size: blob.size,
+                        isText: isText,
+                        textContent: textContent
+                    };
+                }
+
+                const fileCount = Object.keys(extractedFiles).length;
+                document.getElementById('fileCountBadge').innerText = `${fileCount} Files Unzipped`;
+                document.getElementById('ezyExplorer').classList.remove('hidden');
+
+                // Auto-fill Repository Name
+                const defaultRepoName = file.name.replace(/\.zip$/i, '').toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+                if (!document.getElementById('newRepoName').value) {
+                    document.getElementById('newRepoName').value = defaultRepoName;
+                }
+
+                renderEzyDirectoryView();
+
+            } catch (err) {
+                alert('ZIP Extraction Error: ' + err.message);
+            }
+        }
+
+        function isTextFile(path) {
+            const textExtensions = ['html', 'htm', 'css', 'js', 'json', 'md', 'txt', 'svg', 'xml', 'yml', 'yaml', 'jsx', 'tsx', 'ts', 'py', 'php', 'gitignore', 'env', 'prettierrc', 'lock'];
+            const fileName = path.split('/').pop().toLowerCase();
+            const ext = fileName.split('.').pop();
+            return textExtensions.includes(ext) || fileName.startsWith('.');
+        }
+
+        // ezyZip-Style Folder & File Renderer
+        function renderEzyDirectoryView() {
+            const container = document.getElementById('ezyFileList');
+            const search = document.getElementById('fileSearchInput').value.toLowerCase().trim();
+            const allPaths = Object.keys(extractedFiles).sort();
+
+            if (allPaths.length === 0) {
+                container.innerHTML = `<div class="p-4 text-center text-[#C7A9A3]">No files inside ZIP</div>`;
+                return;
+            }
+
+            // Group top-level folders & root files exactly like ezyZip
+            const folders = new Set();
+            const rootFiles = [];
+
+            allPaths.forEach(path => {
+                if (search && !path.toLowerCase().includes(search)) return;
+
+                if (search) {
+                    // In search mode, show direct file list
+                    rootFiles.push(path);
+                } else {
+                    const parts = path.split('/');
+                    if (parts.length > 1) {
+                        folders.add(parts[0]); // folder name
+                    } else {
+                        rootFiles.push(path); // top-level file
+                    }
+                }
+            });
+
+            let html = '';
+
+            // Render Folder Rows (Green download icon style like ezyZip)
+            if (!search) {
+                Array.from(folders).sort().forEach(folderName => {
+                    const folderFileCount = allPaths.filter(p => p.startsWith(folderName + '/')).length;
+                    html += `
+                        <div class="flex items-center justify-between p-3 bg-[#3E3239]/60 hover:bg-[#6B5560]/40 rounded-xl transition border border-[#6B5560]/50">
+                            <div class="flex items-center gap-3 font-bold text-[#F7EFE7] truncate">
+                                <i class="fa-solid fa-folder text-[#E8D2C4] text-base"></i>
+                                <span class="truncate">${folderName}</span>
+                                <span class="text-[10px] text-[#C7A9A3] bg-[#6B5560] px-2 py-0.5 rounded-full font-sans">${folderFileCount} items</span>
+                            </div>
+                            <button onclick="deleteFolder('${folderName}')" class="text-xs text-red-300 hover:text-red-100 p-1.5" title="Remove Folder">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+            }
+
+            // Render File Rows
+            rootFiles.forEach(path => {
+                const file = extractedFiles[path];
+                const formattedSize = formatBytes(file.size);
+
+                html += `
+                    <div class="flex items-center justify-between p-3 bg-[#3E3239]/40 hover:bg-[#6B5560]/30 rounded-xl transition border border-[#6B5560]/30">
+                        <div class="flex items-center gap-3 font-semibold text-[#F7EFE7] truncate pr-2">
+                            <i class="fa-solid ${file.isText ? 'fa-file-code text-[#E8D2C4]' : 'fa-file text-[#9E8189]'} text-sm"></i>
+                            <span class="truncate" title="${path}">${path}</span>
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <span class="text-xs text-[#C7A9A3] font-mono">${formattedSize}</span>
+                            <button onclick="deleteFile('${path}')" class="text-xs text-red-300 hover:text-red-100 p-1" title="Delete File">
+                                <i class="fa-solid fa-xmark text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function filterFiles() {
+            renderEzyDirectoryView();
+        }
+
+        function deleteFile(path) {
+            delete extractedFiles[path];
+            renderEzyDirectoryView();
+            updateBadgeCount();
+        }
+
+        function deleteFolder(folderName) {
+            Object.keys(extractedFiles).forEach(path => {
+                if (path.startsWith(folderName + '/')) {
+                    delete extractedFiles[path];
+                }
+            });
+            renderEzyDirectoryView();
+            updateBadgeCount();
+        }
+
+        function updateBadgeCount() {
+            const count = Object.keys(extractedFiles).length;
+            document.getElementById('fileCountBadge').innerText = `${count} Files Remaining`;
+        }
+
+        function clearZip() {
+            extractedFiles = {};
+            document.getElementById('zipInput').value = '';
+            document.getElementById('ezyExplorer').classList.add('hidden');
+            document.getElementById('fileCountBadge').innerText = 'No ZIP Loaded';
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Real Git Trees Push Engine
+        async function startDeployment() {
+            const token = localStorage.getItem('zip2git_github_token');
+            if (!token) {
+                alert('Please login with GitHub first!');
+                toggleAuthModal();
+                return;
+            }
+
+            const filePaths = Object.keys(extractedFiles);
+            if (filePaths.length === 0) {
+                alert('Please upload a ZIP file first.');
+                return;
+            }
+
+            document.getElementById('progressContainer').classList.remove('hidden');
+            document.getElementById('deployBtn').disabled = true;
+            document.getElementById('deployBtnText').innerText = 'PUSHING TO GITHUB...';
+
+            try {
+                let repoFullName = "";
+                let branch = "main";
+
+                // Step 1: Create or Get Repository
+                if (activeRepoMode === 'new') {
+                    const repoName = document.getElementById('newRepoName').value.trim();
+                    const repoDesc = document.getElementById('newRepoDesc').value.trim();
+                    const isPrivate = document.getElementById('newRepoPrivate').value === 'true';
+
+                    if (!repoName) throw new Error('Enter a repository name.');
+
+                    updateLog(`Creating repository '${repoName}' on GitHub...`, 10);
+
+                    const createRes = await fetch('https://api.github.com/user/repos', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            name: repoName,
+                            description: repoDesc,
+                            private: isPrivate,
+                            auto_init: true
+                        })
+                    });
+
+                    if (!createRes.ok) {
+                        const err = await createRes.json();
+                        throw new Error(err.message || 'Could not create repository.');
+                    }
+
+                    const repoData = await createRes.json();
+                    repoFullName = repoData.full_name;
+                    branch = repoData.default_branch || 'main';
+                    updateLog(`Repository created: ${repoFullName}`, 25);
+                } else {
+                    repoFullName = document.getElementById('repoSelect').value;
+                    branch = document.getElementById('targetBranch').value.trim() || 'main';
+                    if (!repoFullName) throw new Error('Select an existing repository.');
+                }
+
+                // Step 2: Get Base Ref / Parent Commit
+                updateLog(`Fetching branch ref '${branch}'...`, 35);
+                let parentCommitSha = null;
+                let baseTreeSha = null;
+
+                const refRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/ref/heads/${branch}`, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+
+                if (refRes.ok) {
+                    const refData = await refRes.json();
+                    parentCommitSha = refData.object.sha;
+
+                    const commitRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/commits/${parentCommitSha}`, {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    if (commitRes.ok) {
+                        const commitData = await commitRes.json();
+                        baseTreeSha = commitData.tree.sha;
+                    }
+                }
+
+                // Step 3: Create Git Blobs for extracted files
+                updateLog(`Uploading ${filePaths.length} file blobs...`, 45);
+                const treeItems = [];
+
+                for (let i = 0; i < filePaths.length; i++) {
+                    const path = filePaths[i];
+                    const file = extractedFiles[path];
+
+                    let blobPayload = {};
+                    if (file.isText) {
+                        blobPayload = { content: file.textContent, encoding: 'utf-8' };
+                    } else {
+                        const base64 = await blobToBase64(file.blob);
+                        blobPayload = { content: base64, encoding: 'base64' };
+                    }
+
+                    const blobRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(blobPayload)
+                    });
+
+                    if (!blobRes.ok) throw new Error(`Blob creation failed for ${path}`);
+                    const blobData = await blobRes.json();
+
+                    treeItems.push({
+                        path: path,
+                        mode: '100644',
+                        type: 'blob',
+                        sha: blobData.sha
+                    });
+
+                    const currentPercent = 45 + Math.floor(((i + 1) / filePaths.length) * 35);
+                    updateLog(`Uploaded blob (${i + 1}/${filePaths.length}): ${path}`, currentPercent);
+                }
+
+                // Step 4: Create Git Tree
+                updateLog(`Constructing Git Tree...`, 85);
+                const treeBody = { tree: treeItems };
+                if (baseTreeSha) treeBody.base_tree = baseTreeSha;
+
+                const treeRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/trees`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(treeBody)
+                });
+
+                if (!treeRes.ok) throw new Error('Git Tree creation failed.');
+                const treeData = await treeRes.json();
+
+                // Step 5: Create Git Commit
+                updateLog(`Creating Commit...`, 92);
+                const commitBody = {
+                    message: `Initial deploy via Zip2Git (${filePaths.length} files)`,
+                    tree: treeData.sha
+                };
+                if (parentCommitSha) commitBody.parents = [parentCommitSha];
+
+                const finalCommitRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/commits`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(commitBody)
+                });
+
+                if (!finalCommitRes.ok) throw new Error('Git Commit failed.');
+                const finalCommitData = await finalCommitRes.json();
+
+                // Step 6: Update Head Reference
+                updateLog(`Updating branch '${branch}' head...`, 98);
+                await fetch(`https://api.github.com/repos/${repoFullName}/git/refs/heads/${branch}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sha: finalCommitData.sha,
+                        force: true
+                    })
+                });
+
+                updateLog(`SUCCESS! All files committed and pushed.`, 100);
+
+                // Show Success Dashboard
+                const repoUrl = `https://github.com/${repoFullName}`;
+                document.getElementById('pushedRepoUrl').href = repoUrl;
+                document.getElementById('pushedRepoUrl').innerText = repoUrl;
+                document.getElementById('vercelLink').href = `https://vercel.com/new/clone?repository-url=${encodeURIComponent(repoUrl)}`;
+                document.getElementById('netlifyLink').href = `https://app.netlify.com/start/deploy?repository=${encodeURIComponent(repoUrl)}`;
+                document.getElementById('deploymentHelper').classList.remove('hidden');
+
+            } catch (err) {
+                updateLog(`ERROR: ${err.message}`, 0);
+                alert('Push Failed: ' + err.message);
+            } finally {
+                document.getElementById('deployBtn').disabled = false;
+                document.getElementById('deployBtnText').innerText = 'PUSH ALL FILES TO GITHUB';
+            }
+        }
+
+        // Helpers
+        function updateLog(message, percent) {
+            const logBox = document.getElementById('logBox');
+            const bar = document.getElementById('progressBar');
+            const percentText = document.getElementById('progressPercentText');
+            const statusText = document.getElementById('progressStatusText');
+
+            const line = document.createElement('div');
+            line.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logBox.appendChild(line);
+            logBox.scrollTop = logBox.scrollHeight;
+
+            if (percent !== undefined) {
+                bar.style.width = `${percent}%`;
+                percentText.innerText = `${percent}%`;
+                statusText.innerText = message;
+            }
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+    </script>
+</body>
+</html>
